@@ -1,0 +1,36 @@
+plugins { id 'com.android.application' }
+
+android {
+    namespace 'com.insane.recomp'
+    compileSdk 34
+    ndkVersion '27.2.12479018'
+    defaultConfig {
+        applicationId 'com.insane.recomp'
+        minSdk 24
+        targetSdk 34
+        versionCode 1
+        versionName '1.0'
+        ndk { abiFilters 'arm64-v8a', 'x86_64' }
+        externalNativeBuild { cmake { arguments '-DANDROID_STL=c++_static', "-DC2_WITH_GAME=${project.findProperty('withGame') ?: 'OFF'}" } }
+    }
+    // Release builds are signed only when the personal key exists (build.sh creates it). The CI template APK
+    // is unsigned and has no game code: the APK builder adds the game and signs it with the user's own key.
+    def keystore = file(System.getenv('INSANE_KEYSTORE') ?: "${System.getProperty('user.home')}/.config/insane-apk/insane.jks")
+    signingConfigs {
+        release {
+            storeFile keystore
+            storePassword 'insane-apk'
+            keyAlias 'insane'
+            keyPassword 'insane-apk'
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            if (keystore.exists() && project.findProperty('withGame') == 'ON') signingConfig signingConfigs.release
+        }
+    }
+    externalNativeBuild { cmake { path 'jni/CMakeLists.txt'; version '3.22.1' } }
+    sourceSets { main { assets.srcDirs = ['src/main/assets'] } }
+    androidResources { noCompress 'mpg', 'mp2', 'idf', 'wav', 'exe', 'dll' }
+}

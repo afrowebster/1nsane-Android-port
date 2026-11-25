@@ -1,0 +1,92 @@
+#!/usr/bin/env python3
+"""Draw the touch-button artwork (original, simple flat icons) and write platform/touch_atlas.h:
+a 1024x384 RGBA atlas of up to 24 cells (128x128), zlib-compressed.
+
+Usage: make_touch_atlas.py [out.h] [preview.png]
+"""
+import sys, zlib
+from PIL import Image, ImageDraw, ImageFont
+
+CELL = 128
+NAMES = ['LEFT', 'RIGHT', 'UP', 'DOWN', 'GAS', 'BRAKE', 'HAND', 'OK', 'BACK', 'PAUSE', 'CAM', 'REAR', 'RESCUE', 'ROLL', 'REPAIR', 'MAP', 'DIFF']
+FONT = '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'
+SS = 4  # supersampling
+
+def font(px): return ImageFont.truetype(FONT, px * SS)
+
+def cell(name):
+    S = CELL * SS
+    im = Image.new('RGBA', (S, S), (0, 0, 0, 0))
+    d = ImageDraw.Draw(im)
+    m = 3 * SS
+    accent = {'GAS': (90, 220, 110), 'BRAKE': (240, 90, 80), 'HAND': (250, 200, 70), 'OK': (90, 220, 110),
+              'BACK': (240, 90, 80), 'RESCUE': (250, 160, 60)}.get(name, (235, 235, 235))
+    d.ellipse([m, m, S - m, S - m], fill=(15, 18, 24, 140), outline=accent + (235,), width=5 * SS)
+    W = (255, 255, 255, 245)
+    c = S / 2
+    def tri(pts): d.polygon([(c + x * S, c + y * S) for x, y in pts], fill=W)
+    def text(t, px, dy=0.0, col=W):
+        f = font(px)
+        b = d.textbbox((0, 0), t, font=f)
+        d.text((c - (b[2] + b[0]) / 2, c + dy * S - (b[3] + b[1]) / 2), t, font=f, fill=col)
+    if name == 'LEFT': tri([(-0.24, 0), (0.14, -0.24), (0.14, 0.24)])
+    elif name == 'RIGHT': tri([(0.24, 0), (-0.14, -0.24), (-0.14, 0.24)])
+    elif name == 'UP': tri([(0, -0.24), (-0.24, 0.14), (0.24, 0.14)])
+    elif name == 'DOWN': tri([(0, 0.24), (-0.24, -0.14), (0.24, -0.14)])
+    elif name == 'GAS':
+        tri([(0, -0.30), (-0.17, -0.08), (0.17, -0.08)]); text('GAS', 26, 0.13, accent + (255,))
+    elif name == 'BRAKE':
+        tri([(0, 0.02), (-0.15, -0.18), (0.15, -0.18)]); text('BRAKE', 21, 0.16, accent + (255,))
+    elif name == 'HAND': text('HAND', 21, -0.09); text('BRAKE', 18, 0.11, accent + (255,))
+    elif name == 'OK': text('OK', 38)
+    elif name == 'BACK':
+        tri([(-0.26, 0), (-0.06, -0.17), (-0.06, 0.17)])
+        d.rectangle([c - 0.07 * S, c - 0.06 * S, c + 0.24 * S, c + 0.06 * S], fill=W)
+    elif name == 'PAUSE':
+        for x in (-0.13, 0.05): d.rectangle([c + x * S, c - 0.2 * S, c + (x + 0.08) * S, c + 0.2 * S], fill=W)
+    elif name == 'CAM':
+        d.rounded_rectangle([c - 0.25 * S, c - 0.13 * S, c + 0.25 * S, c + 0.19 * S], radius=6 * SS, fill=W)
+        d.rectangle([c - 0.08 * S, c - 0.2 * S, c + 0.08 * S, c - 0.12 * S], fill=W)
+        d.ellipse([c - 0.11 * S, c - 0.08 * S, c + 0.11 * S, c + 0.14 * S], fill=(15, 18, 24, 255))
+        d.ellipse([c - 0.06 * S, c - 0.03 * S, c + 0.06 * S, c + 0.09 * S], fill=W)
+    elif name == 'REAR':
+        d.rounded_rectangle([c - 0.26 * S, c - 0.2 * S, c + 0.26 * S, c - 0.02 * S], radius=8 * SS, outline=W, width=5 * SS)
+        text('REAR', 20, 0.16)
+    elif name == 'RESCUE': text('SOS', 30, -0.02, accent + (255,))
+    elif name == 'ROLL':
+        r = 0.21 * S
+        d.arc([c - r, c - r, c + r, c + r], start=-60, end=200, fill=W, width=7 * SS)
+        tri([(0.10, -0.29), (0.26, -0.12), (0.03, -0.08)])
+    elif name == 'REPAIR':
+        d.line([c - 0.2 * S, c + 0.2 * S, c + 0.1 * S, c - 0.1 * S], fill=W, width=10 * SS)
+        r = 0.12 * S
+        d.ellipse([c + 0.02 * S, c - 0.26 * S, c + 0.02 * S + 2 * r, c - 0.26 * S + 2 * r], fill=W)
+        d.rectangle([c + 0.09 * S, c - 0.30 * S, c + 0.17 * S, c - 0.14 * S], fill=(0, 0, 0, 0))
+    elif name == 'DIFF':
+        # padlock over the word: differential lock
+        d.rounded_rectangle([c - 0.13 * S, c - 0.21 * S, c + 0.13 * S, c - 0.01 * S], radius=4 * SS, fill=W)
+        r = 0.085 * S
+        d.arc([c - r, c - 0.33 * S, c + r, c - 0.33 * S + 2 * r], start=180, end=360, fill=W, width=5 * SS)
+        d.line([c - r + 2.5 * SS, c - 0.33 * S + r, c - r + 2.5 * SS, c - 0.2 * S], fill=W, width=5 * SS)
+        d.line([c + r - 2.5 * SS, c - 0.33 * S + r, c + r - 2.5 * SS, c - 0.2 * S], fill=W, width=5 * SS)
+        text('DIFF', 24, 0.16, (250, 200, 70, 255))
+    elif name == 'MAP':
+        d.polygon([(c - 0.25 * S, c - 0.16 * S), (c - 0.08 * S, c - 0.22 * S), (c + 0.08 * S, c - 0.16 * S), (c + 0.25 * S, c - 0.22 * S),
+                   (c + 0.25 * S, c + 0.18 * S), (c + 0.08 * S, c + 0.24 * S), (c - 0.08 * S, c + 0.18 * S), (c - 0.25 * S, c + 0.24 * S)], fill=W)
+        for x in (-0.08, 0.08): d.line([c + x * S, c - 0.2 * S, c + x * S, c + 0.2 * S], fill=(15, 18, 24, 255), width=3 * SS)
+    return im.resize((CELL, CELL), Image.LANCZOS)
+
+atlas = Image.new('RGBA', (CELL * 8, CELL * 3), (0, 0, 0, 0))
+for i, n in enumerate(NAMES): atlas.paste(cell(n), ((i % 8) * CELL, (i // 8) * CELL))
+out = sys.argv[1] if len(sys.argv) > 1 else 'platform/touch_atlas.h'
+if len(sys.argv) > 2:
+    prev = Image.new('RGBA', atlas.size, (70, 90, 60, 255)); prev.alpha_composite(atlas); prev.save(sys.argv[2])
+z = zlib.compress(atlas.tobytes(), 9)
+with open(out, 'w') as f:
+    f.write('/* generated by tools/make_touch_atlas.py: touch button artwork, %dx%d RGBA, zlib */\n' % atlas.size)
+    f.write('enum { %s };\n' % ', '.join('TA_%s' % n for n in NAMES))
+    f.write('#define TOUCH_ATLAS_W %d\n#define TOUCH_ATLAS_H %d\n#define TOUCH_ATLAS_CELL %d\n' % (atlas.size[0], atlas.size[1], CELL))
+    f.write('static const unsigned int touch_atlas_zlen = %d;\nstatic const unsigned char touch_atlas_z[] = {\n' % len(z))
+    for i in range(0, len(z), 24): f.write(''.join('%d,' % b for b in z[i:i + 24]) + '\n')
+    f.write('};\n')
+print('atlas: %d bytes compressed' % len(z))
